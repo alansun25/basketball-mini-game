@@ -5,6 +5,8 @@
 #include "jim.cpp"
 #include "_cow_optimization.cpp"
 
+const double BALL_RADIUS = 1;
+
 enum Direction
 {
     UP,
@@ -13,42 +15,27 @@ enum Direction
     RIGHT
 };
 
+enum Orientation
+{
+    VERTICAL,
+    HORIZONTAL
+};
+
 struct Collision
 {
     bool collided;
-    Direction direction;
     vec2 difference;
+    Orientation orientation;
+    Direction direction;
 };
 
-Direction vector_direction(vec2 vec)
-{
-    vec2 compass[] = {
-        V2(0., 1.),  // up
-        V2(1., 0.),  // right
-        V2(0., -1.), // down
-        V2(-1., 0.)  // left
-    };
-    float max = 0.0f;
-    unsigned int best_match = -1;
-    for (unsigned int i = 0; i < 4; i++)
-    {
-        float dot_product = dot(normalized(vec), compass[i]);
-        if (dot_product > max)
-        {
-            max = dot_product;
-            best_match = i;
-        }
-    }
-    return (Direction)best_match;
-}
-
-Collision check_ball_collision(vec2 collision[], vec2 ball_center)
+Collision check_ball_collision(vec2 collision[], vec2 ball_center, bool is_rim = false)
 {
     Collision result;
 
-    double max_x = TINY;
+    double max_x = -HUGE;
     double min_x = HUGE;
-    double max_y = TINY;
+    double max_y = -HUGE;
     double min_y = HUGE;
 
     for (int i = 0; i < 4; i++)
@@ -68,11 +55,65 @@ Collision check_ball_collision(vec2 collision[], vec2 ball_center)
 
     difference = closest - ball_center;
 
-    if (norm(difference) < 1)
+    // if collided
+    if (norm(difference) <= BALL_RADIUS)
     {
         result.collided = true;
-        result.direction = vector_direction(difference);
         result.difference = difference;
+        if (is_rim)
+        {
+            if (ball_center.y >= max_y || ball_center.y <= min_y)
+            {
+                result.orientation = VERTICAL;
+                if (ball_center.y >= max_y)
+                {
+                    result.direction = DOWN;
+                }
+                else
+                {
+                    result.direction = UP;
+                }
+            }
+            else if (ball_center.x >= max_x || ball_center.x <= min_x)
+            {
+                result.orientation = HORIZONTAL;
+                if (ball_center.y >= max_x)
+                {
+                    result.direction = LEFT;
+                }
+                else
+                {
+                    result.direction = RIGHT;
+                }
+            }
+        }
+        else
+        {
+            if (ball_center.x >= max_x || ball_center.x <= min_x)
+            {
+                result.orientation = HORIZONTAL;
+                if (ball_center.y >= max_x)
+                {
+                    result.direction = LEFT;
+                }
+                else
+                {
+                    result.direction = RIGHT;
+                }
+            }
+            else if (ball_center.y >= max_y || ball_center.y <= min_y)
+            {
+                result.orientation = VERTICAL;
+                if (ball_center.y >= max_y)
+                {
+                    result.direction = DOWN;
+                }
+                else
+                {
+                    result.direction = UP;
+                }
+            }
+        }
     }
     else
     {
@@ -80,38 +121,6 @@ Collision check_ball_collision(vec2 collision[], vec2 ball_center)
     }
 
     return result;
-}
-
-void do_collision(Collision collision, vec2 vel, vec2 ball_center)
-{
-    Direction dir = collision.direction;
-    vec2 diff = collision.difference;
-
-    if (dir == LEFT || dir == RIGHT) // horizontal collision
-    {
-        vel.x = -vel.x; // reverse horizontal velocity
-
-        // reposition ball to outside of object collided with
-        // (since it would have gone slightly inside of the object
-        // for collision detection)
-        double reposition = 1 - abs(diff.x);
-
-        if (dir == LEFT)
-            ball_center.x += reposition; // move ball to right
-        else
-            ball_center.x -= reposition; // move ball to left;
-    }
-    else // vertical collision
-    {
-        vel.y = -vel.y; // reverse vertical velocity
-
-        double reposition = 1 - abs(diff.y);
-
-        if (dir == UP)
-            ball_center.y -= reposition; // move ball back up
-        else
-            ball_center.y += reposition; // move ball back down
-    }
 }
 
 void game()
@@ -122,7 +131,7 @@ void game()
 
     int bg = 0;
     char *bgs[] = {"forest.jpeg", "city.png", "volcano.jpg", "moon.jpg", "vapor.jpg"};
-    vec3 bg_vertex_positions[] = {
+    vec3 bg_vp[] = {
         {-40, -20, 0},
         {40, -20, 0},
         {40, 20, 0},
@@ -154,75 +163,96 @@ void game()
         V3(82, 69, 196) / 255.,
         V3(73, 209, 149) / 255.,
     };
-    vec3 net_vertex_positions[] = {
+    vec3 net_vp[] = {
         {15, -3, 0},
         {18, -3, 0},
         {18, 0, 0},
         {15, 0, 0},
     };
-    vec2 front_rim_vertex_positions[] = {
-        {15.25, 0.2},
-        {15.25, -0.6},
-        {14.75, -0.6},
-        {14.75, 0.2},
-    };
-    vec2 back_rim_vertex_positions[] = {
-        {18.25, 0.2},
-        {18.25, -0.6},
-        {17.75, -0.6},
-        {17.75, 0.2},
-    };
-    vec2 front_net_vertex_positions[] = {
-        {15.1, -0.6},
-        {15.1, -3},
-        {14.9, -3},
-        {14.9, -0.6},
-    };
-    vec2 back_net_vertex_positions[] = {
-        {18.1, -0.6},
-        {18.1, -3},
-        {17.9, -3},
-        {17.9, -0.6},
-    };
-    vec2 backboard_vertex_positions[] = {
-        {19.25, 5.25},
-        {19, 5.25},
-        {19, -2.25},
-        {19.25, -2.25},
-    };
-    vec2 h_stand_vertex_positions[] = {
-        {19.2, 2.25},
-        {21.75, 2.25},
-        {21.75, 1.5},
-        {19.2, 1.5},
-    };
-    vec2 v_stand_vertex_positions[] = {
-        {21.75, 1.5},
-        {21, 1.5},
-        {21, -17},
-        {21.75, -17},
-    };
-    vec2 connect_rim_vertex_positions[] = {
+    vec2 connect_rim_display_vp[] = {
         {18, -.15},
         {18, 0},
         {19, 0},
         {19, -.15},
     };
 
-    vec2 *collision_quads[] = {
-        front_rim_vertex_positions,
-        back_rim_vertex_positions,
-        front_net_vertex_positions,
-        back_net_vertex_positions,
-        backboard_vertex_positions,
-        h_stand_vertex_positions,
-        v_stand_vertex_positions,
-        connect_rim_vertex_positions,
+    vec2 ground[] = {
+        {-40, -17},
+        {40, -17},
+        {40, -20},
+        {-40, -20},
     };
+    vec2 front_rim_vp[] = {
+        {15.25, -0.6},
+        {15.25, 0},
+        {14.75, 0},
+        {14.75, -0.6},
+    };
+    vec2 back_rim_vp[] = {
+        {18.25, -0.6},
+        {18.25, 0},
+        {17.75, 0},
+        {17.75, -0.6},
+    };
+    vec2 front_net_vp[] = {
+        {15.25, -3},
+        {15.25, -0.6},
+        {14.75, -0.6},
+        {14.75, -3},
+    };
+    vec2 back_net_vp[] = {
+        {18.25, -3},
+        {18.25, -0.6},
+        {17.75, -0.6},
+        {17.75, -3},
+    };
+    vec2 backboard_vp[] = {
+        {19.25, 5.25},
+        {19, 5.25},
+        {19, -2.25},
+        {19.25, -2.25},
+    };
+    vec2 h_stand_vp[] = {
+        {19.2, 2.25},
+        {21.75, 2.25},
+        {21.75, 1.5},
+        {19.2, 1.5},
+    };
+    vec2 v_stand_vp[] = {
+        {21.75, 1.5},
+        {21, 1.5},
+        {21, -17},
+        {21.75, -17},
+    };
+    vec2 connect_rim_vp[] = {
+        {18, -.5},
+        {18, 0},
+        {19, 0},
+        {19, -.5},
+    };
+
+    vec2 *collision_quads[] = {
+        ground,
+        front_rim_vp,
+        back_rim_vp,
+        backboard_vp,
+        h_stand_vp,
+        v_stand_vp,
+        connect_rim_vp,
+        front_net_vp,
+        back_net_vp,
+    };
+    vec2 bottom_net[] = {
+        {15.5, -3},
+        {17.5, -3},
+        {17.5, -3.01},
+        {15.5, -3.01}};
 
     double acc = -9.81;
     vec2 vel;
     bool ball_shot = false;
+    int shots_made = 0;
+    bool ball_in_hoop = false;
 
     while (begin_frame())
     {
@@ -235,16 +265,12 @@ void game()
         }
 
         { // background
-            fancy_draw(PV, V, M, 2, triangle_indices, 4, bg_vertex_positions, NULL, NULL, {}, vertex_texCoords, bgs[bg]);
+            fancy_draw(PV, V, M, 2, triangle_indices, 4, bg_vp, NULL, NULL, {}, vertex_texCoords, bgs[bg]);
         }
 
         { // blacktop
             basic_draw(QUADS, PV, 4, blacktop, blacktop_colors[bg]);
             basic_draw(LINE_STRIP, PV, 4, blacktop_lines, monokai.white);
-        }
-
-        { // net
-            fancy_draw(PV, V, M, 2, triangle_indices, 4, net_vertex_positions, NULL, NULL, {}, vertex_texCoords, "net.png");
         }
 
         { // connect rim to backboard
@@ -253,7 +279,7 @@ void game()
             gl_begin(QUADS);
             for (int i = 0; i < 4; i++)
             {
-                gl_vertex(connect_rim_vertex_positions[i]);
+                gl_vertex(connect_rim_display_vp[i]);
             }
             gl_end();
         }
@@ -263,7 +289,7 @@ void game()
             gl_begin(QUADS);
             for (int i = 0; i < 4; i++)
             {
-                gl_vertex(backboard_vertex_positions[i]);
+                gl_vertex(backboard_vp[i]);
             }
             gl_end();
         }
@@ -272,109 +298,174 @@ void game()
             gl_begin(QUADS);
             for (int i = 0; i < 4; i++)
             {
-                gl_vertex(h_stand_vertex_positions[i]);
+                gl_vertex(h_stand_vp[i]);
             }
             gl_end();
 
             gl_begin(QUADS);
             for (int i = 0; i < 4; i++)
             {
-                gl_vertex(v_stand_vertex_positions[i]);
+                gl_vertex(v_stand_vp[i]);
             }
             gl_end();
         }
 
         { // ball
-            vec3 ball_vertex_positions[] = {
-                {ball_center.x - 1, ball_center.y - 1, 0},
-                {ball_center.x + 1, ball_center.y - 1, 0},
-                {ball_center.x + 1, ball_center.y + 1, 0},
-                {ball_center.x - 1, ball_center.y + 1, 0},
+            vec3 ball_vp[] = {
+                {ball_center.x - BALL_RADIUS, ball_center.y - BALL_RADIUS, 0},
+                {ball_center.x + BALL_RADIUS, ball_center.y - BALL_RADIUS, 0},
+                {ball_center.x + BALL_RADIUS, ball_center.y + BALL_RADIUS, 0},
+                {ball_center.x - BALL_RADIUS, ball_center.y + BALL_RADIUS, 0},
             };
-            vec3 ball_shadow_vertex_positions[] = {
-                {shadow_center.x - 1, shadow_center.y - .5, 0},
-                {shadow_center.x + 1, shadow_center.y - .5, 0},
-                {shadow_center.x + 1, shadow_center.y + 1, 0},
-                {shadow_center.x - 1, shadow_center.y + 1, 0},
+            vec3 ball_shadow_vp[] = {
+                {shadow_center.x - BALL_RADIUS, shadow_center.y - BALL_RADIUS / 2, 0},
+                {shadow_center.x + BALL_RADIUS, shadow_center.y - BALL_RADIUS / 2, 0},
+                {shadow_center.x + BALL_RADIUS, shadow_center.y + BALL_RADIUS, 0},
+                {shadow_center.x - BALL_RADIUS, shadow_center.y + BALL_RADIUS, 0},
             };
 
-            vec2 start_drag;
-            vec2 end_drag;
+            // ball shadow
+            fancy_draw(PV, V, M, 2, triangle_indices, 4, ball_shadow_vp, NULL, NULL, {}, vertex_texCoords, "basketball.png", true);
+
+            static vec2 start_drag;
+            static vec2 end_drag;
+            static vec2 potential_drag;
+            vec2 potential_ball_center = ball_center;
+            vec2 potential_vel;
 
             if (input.mouse_left_pressed)
             {
                 start_drag = input_get_mouse_position_in_world_coordinates(PV);
             }
 
+            if (input.mouse_left_held)
+            {
+                potential_drag = input_get_mouse_position_in_world_coordinates(PV);
+                potential_vel = start_drag - potential_drag * 1.2;
+
+                // draw trajectory arc
+                gl_color(monokai.orange);
+                gl_begin(POINTS);
+                for (int i = 0; i < 70; i++)
+                {
+                    potential_vel.y += acc / 20;
+                    potential_ball_center += potential_vel / 20;
+                    gl_vertex(potential_ball_center);
+                }
+                gl_end();
+            }
+
             if (input.mouse_left_released)
             {
                 end_drag = input_get_mouse_position_in_world_coordinates(PV);
-                vel.x = start_drag.x - end_drag.x * 1.2;
-                vel.y = start_drag.y - end_drag.y * 1.2;
+                vel = start_drag - end_drag * 1.2;
                 ball_shot = true;
             }
 
             if (ball_shot)
             {
-                for (int i = 0; i < 8; i++)
+                vel.y += acc / 20;
+
+                for (int i = 0; i < NELEMS(collision_quads); i++)
                 {
-                    Collision collision = check_ball_collision(collision_quads[i], ball_center);
+                    bool is_rim = i == 1 || i == 2 || i == 6;
+                    Collision collision = check_ball_collision(collision_quads[i], ball_center, is_rim);
                     if (collision.collided)
                     {
-                        /*
-                        TODO:
-                        doesn't work if i put into helper function... also bouncing is too violent
-                        */
-
+                        Orientation ori = collision.orientation;
                         Direction dir = collision.direction;
                         vec2 diff = collision.difference;
 
-                        if (dir == LEFT || dir == RIGHT) // horizontal collision
+                        if (ori == VERTICAL)
                         {
-                            vel.x = -vel.x; // reverse horizontal velocity
+                            vel.y *= -0.6;
 
-                            // reposition ball to outside of object collided with
-                            // (since it would have gone slightly inside of the object
-                            // for collision detection)
-                            // double reposition = 1 - abs(diff.x);
+                            if (abs(vel.y) < 1)
+                            {
+                                vel.y = 0;
+                            }
 
-                            // if (dir == LEFT)
-                            //     ball_center.x += reposition; // move ball to right
-                            // else
-                            //     ball_center.x -= reposition; // move ball to left;
+                            double reposition = 1 - abs(diff.y);
+                            if (dir == UP)
+                            {
+                                ball_center.y -= reposition;
+                            }
+                            else
+                            {
+                                ball_center.y += reposition;
+                            }
                         }
-                        else // vertical collision
+                        else
                         {
-                            vel.y = -vel.y; // reverse vertical velocity
+                            vel.x *= -0.6;
 
-                            // double reposition = 1 - abs(diff.y);
-
-                            // if (dir == UP)
-                            //     ball_center.y -= reposition; // move ball back up
-                            // else
-                            //     ball_center.y += reposition; // move ball back down
+                            double reposition = 1 - abs(diff.x);
+                            if (dir == LEFT)
+                            {
+                                ball_center.x += reposition;
+                            }
+                            else
+                            {
+                                ball_center.x -= reposition;
+                            }
                         }
                     }
                 }
 
-                vel.y += acc / 20;
-                ball_center += vel / 20;
-                shadow_center.x += vel.x / 20;
+                vec2 ball_top = {ball_center.x, ball_center.y + BALL_RADIUS};
+                if (ball_top.x >= 13 && ball_top.x <= 20 && ball_top.y <= 0 && ball_top.y >= -3)
+                { // ball is inside hoop
+                    ball_in_hoop = true;
+                }
 
-                // when ball hits ground, reset it
+                if (ball_in_hoop && ball_top.x >= 13 && ball_top.x <= 20 && ball_top.y < -3)
+                {
+                    shots_made++;
+                    ball_in_hoop = false;
+                }
+
+                // Collision shot_made = check_ball_collision(bottom_net, ball_center);
+                // if (shot_made.collided)
+                // {
+                //     Orientation ori = shot_made.orientation;
+                //     Direction dir = shot_made.direction;
+
+                //     if (ori == VERTICAL && dir == DOWN)
+                //     {
+                //         shots_made++;
+                //     }
+                // }
+
+                ball_center += vel / 20;
+                shadow_center.x = ball_center.x;
+
+                // ball hits ground
                 if (ball_center.y - 1 < -15)
                 {
+                    // TODO: reset ball after certain number of seconds
                     ball_shot = false;
                     ball_center = initial_ball_center;
                     shadow_center = initial_shadow_center;
                 }
             }
 
-            fancy_draw(PV, V, M, 2, triangle_indices, 4, ball_vertex_positions, NULL, NULL, {}, vertex_texCoords, "basketball.png");
-
-            // ball shadow
-            fancy_draw(PV, V, M, 2, triangle_indices, 4, ball_shadow_vertex_positions, NULL, NULL, {}, vertex_texCoords, "basketball.png", true);
+            fancy_draw(PV, V, M, 2, triangle_indices, 4, ball_vp, NULL, NULL, {}, vertex_texCoords, "basketball.png");
         }
+
+        { // net
+            fancy_draw(PV, V, M, 2, triangle_indices, 4, net_vp, NULL, NULL, {}, vertex_texCoords, "net.png");
+        }
+
+        basic_draw(QUADS, PV, 4, bottom_net, monokai.white);
+        // basic_draw(QUADS, PV, 4, front_rim_vp, monokai.white);
+        // basic_draw(QUADS, PV, 4, front_net_vp, monokai.white);
+        // basic_draw(QUADS, PV, 4, back_rim_vp, monokai.white);
+        // basic_draw(QUADS, PV, 4, back_net_vp, monokai.white);
+
+        char shots[8];
+        sprintf(shots, "%d", shots_made);
+
+        basic_text(PV, shots, V2(20, 15), monokai.white, 100);
 
         imgui_slider("background", &bg, 0, 4, 'j', 'k', true);
     }
