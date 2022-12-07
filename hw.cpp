@@ -4,6 +4,9 @@
 #include "_cow_supplement.cpp"
 #include "jim.cpp"
 #include "_cow_optimization.cpp"
+#include "time.h"
+#include <fstream>
+#include <iostream>
 
 const double BALL_RADIUS = 1;
 
@@ -176,12 +179,6 @@ void game()
         {19, -.15},
     };
 
-    vec2 ground[] = {
-        {-40, -17},
-        {40, -17},
-        {40, -20},
-        {-40, -20},
-    };
     vec2 front_rim_vp[] = {
         {15.25, -0.6},
         {15.25, 0},
@@ -195,10 +192,10 @@ void game()
         {17.75, -0.6},
     };
     vec2 front_net_vp[] = {
-        {15.25, -3},
+        {15.25, -4},
         {15.25, -0.6},
         {14.75, -0.6},
-        {14.75, -3},
+        {14.75, -4},
     };
     vec2 back_net_vp[] = {
         {18.25, -3},
@@ -232,7 +229,6 @@ void game()
     };
 
     vec2 *collision_quads[] = {
-        ground,
         front_rim_vp,
         back_rim_vp,
         backboard_vp,
@@ -242,20 +238,36 @@ void game()
         front_net_vp,
         back_net_vp,
     };
-    vec2 bottom_net[] = {
-        {15.5, -3},
-        {17.5, -3},
-        {17.5, -3.01},
-        {15.5, -3.01}};
 
-    double acc = -9.81;
     vec2 vel;
+    double acc = -9.81;
     bool ball_shot = false;
-    int shots_made = 0;
     bool ball_in_hoop = false;
+    bool show_collision_geom = false;
+    bool practice_mode = false;
+    int score = 0;
+
+    int high_score;
+    std::fstream file;
+    file.open("highscore.txt");
+    if (file.is_open())
+    {
+        file >> high_score;
+    }
+    file.close();
+
+    time_t start;
+    int seconds_since_start = 0;
+    int time_limit = 30;
+    bool game_started = false;
 
     while (begin_frame())
     {
+        if (game_started)
+        {
+            seconds_since_start = difftime(time(0), start);
+        }
+
         camera_move(&camera, true, true);
         mat4 PV, V, M;
         { // set PV, V, M
@@ -341,7 +353,7 @@ void game()
             if (input.mouse_left_held)
             {
                 potential_drag = input_get_mouse_position_in_world_coordinates(PV);
-                potential_vel = start_drag - potential_drag * 1.2;
+                potential_vel = 2 * (start_drag - potential_drag);
 
                 // draw trajectory arc
                 gl_color(monokai.orange);
@@ -357,8 +369,13 @@ void game()
 
             if (input.mouse_left_released)
             {
+                if (!game_started && !practice_mode)
+                { // start game on release of first shot and if not in practice mode
+                    start = time(0);
+                    game_started = true;
+                }
                 end_drag = input_get_mouse_position_in_world_coordinates(PV);
-                vel = start_drag - end_drag * 1.2;
+                vel = 2 * (start_drag - end_drag);
                 ball_shot = true;
             }
 
@@ -368,7 +385,7 @@ void game()
 
                 for (int i = 0; i < NELEMS(collision_quads); i++)
                 {
-                    bool is_rim = i == 1 || i == 2 || i == 6;
+                    bool is_rim = i == 0 || i == 1 || i == 5;
                     Collision collision = check_ball_collision(collision_quads[i], ball_center, is_rim);
                     if (collision.collided)
                     {
@@ -379,11 +396,6 @@ void game()
                         if (ori == VERTICAL)
                         {
                             vel.y *= -0.6;
-
-                            if (abs(vel.y) < 1)
-                            {
-                                vel.y = 0;
-                            }
 
                             double reposition = 1 - abs(diff.y);
                             if (dir == UP)
@@ -420,54 +432,80 @@ void game()
 
                 if (ball_in_hoop && ball_top.x >= 13 && ball_top.x <= 20 && ball_top.y < -3)
                 {
-                    shots_made++;
+                    if (!practice_mode)
+                    {
+                        score++;
+                        high_score = MAX(score, high_score);
+
+                        file.open("highscore.txt");
+                        if (file.is_open())
+                        {
+                            file << high_score;
+                        }
+                        file.close();
+                    }
+
                     ball_in_hoop = false;
                 }
 
-                // Collision shot_made = check_ball_collision(bottom_net, ball_center);
-                // if (shot_made.collided)
-                // {
-                //     Orientation ori = shot_made.orientation;
-                //     Direction dir = shot_made.direction;
-
-                //     if (ori == VERTICAL && dir == DOWN)
-                //     {
-                //         shots_made++;
-                //     }
-                // }
-
                 ball_center += vel / 20;
                 shadow_center.x = ball_center.x;
-
-                // ball hits ground
-                if (ball_center.y - 1 < -15)
-                {
-                    // TODO: reset ball after certain number of seconds
-                    ball_shot = false;
-                    ball_center = initial_ball_center;
-                    shadow_center = initial_shadow_center;
-                }
             }
 
             fancy_draw(PV, V, M, 2, triangle_indices, 4, ball_vp, NULL, NULL, {}, vertex_texCoords, "basketball.png");
+
+            // reset ball position when it hits ground
+            if (ball_center.y - 1 < -15)
+            {
+                ball_shot = false;
+                ball_center = initial_ball_center;
+                shadow_center = initial_shadow_center;
+            }
         }
 
         { // net
             fancy_draw(PV, V, M, 2, triangle_indices, 4, net_vp, NULL, NULL, {}, vertex_texCoords, "net.png");
         }
 
-        basic_draw(QUADS, PV, 4, bottom_net, monokai.white);
-        // basic_draw(QUADS, PV, 4, front_rim_vp, monokai.white);
-        // basic_draw(QUADS, PV, 4, front_net_vp, monokai.white);
-        // basic_draw(QUADS, PV, 4, back_rim_vp, monokai.white);
-        // basic_draw(QUADS, PV, 4, back_net_vp, monokai.white);
+        if (show_collision_geom)
+        {
+            for (int i = 0; i < NELEMS(collision_quads); i++)
+            {
+                basic_draw(QUADS, PV, 4, collision_quads[i], monokai.red);
+            }
+        }
 
-        char shots[8];
-        sprintf(shots, "%d", shots_made);
+        if (!practice_mode)
+        {
+            char time_str[8];
+            sprintf(time_str, "%d", time_limit - seconds_since_start);
+            basic_text(PV, time_str, V2(0, 15), monokai.white, 100);
 
-        basic_text(PV, shots, V2(20, 15), monokai.white, 100);
+            char score_str[8];
+            sprintf(score_str, "%d", score);
+            basic_text(PV, score_str, V2(20, 15), monokai.white, 100);
 
+            char high_score_str[20];
+            sprintf(high_score_str, "high score: %d", high_score);
+            basic_text(PV, high_score_str, V2(20, 10), monokai.white, 25);
+        }
+
+        if (imgui_button("reset game", 'r') || seconds_since_start == time_limit + 1)
+        {
+            ball_shot = false;
+            ball_center = initial_ball_center;
+            shadow_center = initial_shadow_center;
+            score = 0;
+            seconds_since_start = 0;
+            game_started = false;
+        }
         imgui_slider("background", &bg, 0, 4, 'j', 'k', true);
+        imgui_checkbox("collision geometry", &show_collision_geom, 'c');
+
+        if (!game_started)
+        {
+            imgui_checkbox("practice mode", &practice_mode, 'p');
+        }
     }
 }
 
