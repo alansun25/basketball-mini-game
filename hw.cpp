@@ -59,6 +59,7 @@ Collision check_ball_collision(vec2 collision[], vec2 ball_center, bool is_rim =
     difference = closest - ball_center;
 
     // if collided
+    // (distance from ball_center to closest point on collision quad < radius)
     if (norm(difference) <= BALL_RADIUS)
     {
         result.collided = true;
@@ -276,53 +277,26 @@ void game()
             M = Identity4x4;
         }
 
-        { // background
+        { // drawing static elements
+            // background
             fancy_draw(PV, V, M, 2, triangle_indices, 4, bg_vp, NULL, NULL, {}, vertex_texCoords, bgs[bg]);
-        }
 
-        { // blacktop
+            // blacktop
             basic_draw(QUADS, PV, 4, blacktop, blacktop_colors[bg]);
             basic_draw(LINE_STRIP, PV, 4, blacktop_lines, monokai.white);
+
+            // connect rim to backboard
+            basic_draw(QUADS, PV, 4, connect_rim_display_vp, V3(253, 177, 89) / 255.);
+
+            // backboard
+            basic_draw(QUADS, PV, 4, backboard_vp, monokai.white);
+
+            // stand
+            basic_draw(QUADS, PV, 4, h_stand_vp, monokai.white);
+            basic_draw(QUADS, PV, 4, v_stand_vp, monokai.white);
         }
 
-        { // connect rim to backboard
-            gl_PV(PV);
-            gl_color(V3(253, 177, 89) / 255.);
-            gl_begin(QUADS);
-            for (int i = 0; i < 4; i++)
-            {
-                gl_vertex(connect_rim_display_vp[i]);
-            }
-            gl_end();
-        }
-
-        { // backboard
-            gl_color(monokai.white);
-            gl_begin(QUADS);
-            for (int i = 0; i < 4; i++)
-            {
-                gl_vertex(backboard_vp[i]);
-            }
-            gl_end();
-        }
-
-        { // stand
-            gl_begin(QUADS);
-            for (int i = 0; i < 4; i++)
-            {
-                gl_vertex(h_stand_vp[i]);
-            }
-            gl_end();
-
-            gl_begin(QUADS);
-            for (int i = 0; i < 4; i++)
-            {
-                gl_vertex(v_stand_vp[i]);
-            }
-            gl_end();
-        }
-
-        { // ball
+        { // ball drawing and animation + game mechanics
             vec3 ball_vp[] = {
                 {ball_center.x - BALL_RADIUS, ball_center.y - BALL_RADIUS, 0},
                 {ball_center.x + BALL_RADIUS, ball_center.y - BALL_RADIUS, 0},
@@ -356,6 +330,7 @@ void game()
                 potential_vel = 2 * (start_drag - potential_drag);
 
                 // draw trajectory arc
+                gl_PV(PV);
                 gl_color(monokai.orange);
                 gl_begin(POINTS);
                 for (int i = 0; i < 70; i++)
@@ -433,7 +408,7 @@ void game()
                 if (ball_in_hoop && ball_top.x >= 13 && ball_top.x <= 20 && ball_top.y < -3)
                 {
                     if (!practice_mode)
-                    {
+                    { // ball made it through hoop
                         score++;
                         high_score = MAX(score, high_score);
 
@@ -448,6 +423,7 @@ void game()
                     ball_in_hoop = false;
                 }
 
+                // update ball position
                 ball_center += vel / 20;
                 shadow_center.x = ball_center.x;
             }
@@ -463,7 +439,7 @@ void game()
             }
         }
 
-        { // net
+        { // draw net
             fancy_draw(PV, V, M, 2, triangle_indices, 4, net_vp, NULL, NULL, {}, vertex_texCoords, "net.png");
         }
 
