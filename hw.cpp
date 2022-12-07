@@ -64,7 +64,7 @@ Collision check_ball_collision(vec2 collision[], vec2 ball_center, bool is_rim =
         result.collided = true;
         result.difference = difference;
         if (is_rim)
-        {
+        { // prioritize vertical collision
             if (ball_center.y >= max_y || ball_center.y <= min_y)
             {
                 result.orientation = VERTICAL;
@@ -91,7 +91,7 @@ Collision check_ball_collision(vec2 collision[], vec2 ball_center, bool is_rim =
             }
         }
         else
-        {
+        { // prioritize horizontal collision
             if (ball_center.x >= max_x || ball_center.x <= min_x)
             {
                 result.orientation = HORIZONTAL;
