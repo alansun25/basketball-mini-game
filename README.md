@@ -2,6 +2,8 @@
 
 Final project for CSCI 371: Computer Graphics, Fall 2022.
 
+Game code in `hw.cpp`.
+
 ## Game
 
 This repository contains code for a basketball mini-game where the goal is to make as many shots as possible in the allotted timeframe. To run the game, type `source mac_build_and_run.sh` in the terminal.
